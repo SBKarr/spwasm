@@ -1,0 +1,8 @@
+[submodule "binaryen"]
+	path = binaryen
+	url = https://github.com/WebAssembly/binaryen.git
+	branch = master
+[submodule "wabt"]
+	path = wabt
+	url = https://github.com/WebAssembly/wabt
+	branch = master

@@ -1,0 +1,47 @@
+;; Test that control-flow transfer unwinds stack and it can be anything after.
+
+(assert_trap (invoke "func-unwind-by-unreachable") "unreachable")
+(assert_return (invoke "func-unwind-by-br"))
+(assert_return (invoke "func-unwind-by-br-value") (i32.const 9))
+(assert_return (invoke "func-unwind-by-br_table"))
+(assert_return (invoke "func-unwind-by-br_table-value") (i32.const 9))
+(assert_return (invoke "func-unwind-by-return") (i32.const 9))
+
+(assert_trap (invoke "block-unwind-by-unreachable") "unreachable")
+(assert_return (invoke "block-unwind-by-br") (i32.const 9))
+(assert_return (invoke "block-unwind-by-br-value") (i32.const 9))
+(assert_return (invoke "block-unwind-by-br_table") (i32.const 9))
+(assert_return (invoke "block-unwind-by-br_table-value") (i32.const 9))
+(assert_return (invoke "block-unwind-by-return") (i32.const 9))
+
+(assert_trap (invoke "block-nested-unwind-by-unreachable") "unreachable")
+(assert_return (invoke "block-nested-unwind-by-br") (i32.const 9))
+(assert_return (invoke "block-nested-unwind-by-br-value") (i32.const 9))
+(assert_return (invoke "block-nested-unwind-by-br_table") (i32.const 9))
+(assert_return (invoke "block-nested-unwind-by-br_table-value") (i32.const 9))
+(assert_return (invoke "block-nested-unwind-by-return") (i32.const 9))
+
+(assert_trap (invoke "unary-after-unreachable") "unreachable")
+(assert_return (invoke "unary-after-br") (i32.const 9))
+(assert_return (invoke "unary-after-br_table") (i32.const 9))
+(assert_return (invoke "unary-after-return") (i32.const 9))
+
+(assert_trap (invoke "binary-after-unreachable") "unreachable")
+(assert_return (invoke "binary-after-br") (i32.const 9))
+(assert_return (invoke "binary-after-br_table") (i32.const 9))
+(assert_return (invoke "binary-after-return") (i32.const 9))
+
+(assert_trap (invoke "select-after-unreachable") "unreachable")
+(assert_return (invoke "select-after-br") (i32.const 9))
+(assert_return (invoke "select-after-br_table") (i32.const 9))
+(assert_return (invoke "select-after-return") (i32.const 9))
+
+(assert_trap (invoke "block-value-after-unreachable") "unreachable")
+(assert_return (invoke "block-value-after-br") (i32.const 9))
+(assert_return (invoke "block-value-after-br_table") (i32.const 9))
+(assert_return (invoke "block-value-after-return") (i32.const 9))
+
+(assert_trap (invoke "loop-value-after-unreachable") "unreachable")
+(assert_return (invoke "loop-value-after-br") (i32.const 9))
+(assert_return (invoke "loop-value-after-br_table") (i32.const 9))
+(assert_return (invoke "loop-value-after-return") (i32.const 9))

@@ -1,0 +1,15 @@
+spwasm - Standalone portable WebAssembly interpreter
+Copyright 2017 Roman Katuntsev <sbkarr@stappler.org>
+
+This product based on WABT interpreter:
+https://github.com/WebAssembly/wabt
+
+WABT licensed under the Apache License, Version 2.0
+by WebAssembly Community Group participants
+All original notices preserved
+
+Spec tests from WebAssembly spec interpreter:
+https://github.com/WebAssembly/spec
+
+Spec tests licensed under Apache License, Version 2.0
+see: https://github.com/WebAssembly/spec/blob/master/test/LICENSE

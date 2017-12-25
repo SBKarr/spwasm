@@ -1,0 +1,51 @@
+;; Test `if` operator
+
+(assert_return (invoke "break-bare") (i32.const 19))
+
+(assert_return (invoke "empty" (i32.const 0)))
+(assert_return (invoke "empty" (i32.const 1)))
+(assert_return (invoke "empty" (i32.const 100)))
+(assert_return (invoke "empty" (i32.const -2)))
+
+(assert_return (invoke "singular" (i32.const 0)) (i32.const 8))
+(assert_return (invoke "singular" (i32.const 1)) (i32.const 7))
+(assert_return (invoke "singular" (i32.const 10)) (i32.const 7))
+(assert_return (invoke "singular" (i32.const -10)) (i32.const 7))
+
+(assert_return (invoke "multi" (i32.const 0)) (i32.const 9))
+(assert_return (invoke "multi" (i32.const 1)) (i32.const 8))
+(assert_return (invoke "multi" (i32.const 13)) (i32.const 8))
+(assert_return (invoke "multi" (i32.const -5)) (i32.const 8))
+
+(assert_return (invoke "nested" (i32.const 0) (i32.const 0)) (i32.const 11))
+(assert_return (invoke "nested" (i32.const 1) (i32.const 0)) (i32.const 10))
+(assert_return (invoke "nested" (i32.const 0) (i32.const 1)) (i32.const 10))
+(assert_return (invoke "nested" (i32.const 3) (i32.const 2)) (i32.const 9))
+(assert_return (invoke "nested" (i32.const 0) (i32.const -100)) (i32.const 10))
+(assert_return (invoke "nested" (i32.const 10) (i32.const 10)) (i32.const 9))
+(assert_return (invoke "nested" (i32.const 0) (i32.const -1)) (i32.const 10))
+(assert_return (invoke "nested" (i32.const -111) (i32.const -2)) (i32.const 9))
+
+(assert_return (invoke "as-unary-operand" (i32.const 0)) (i32.const 0))
+(assert_return (invoke "as-unary-operand" (i32.const 1)) (i32.const 0))
+(assert_return (invoke "as-unary-operand" (i32.const -1)) (i32.const 0))
+
+(assert_return (invoke "as-binary-operand" (i32.const 0) (i32.const 0)) (i32.const 15))
+(assert_return (invoke "as-binary-operand" (i32.const 0) (i32.const 1)) (i32.const -12))
+(assert_return (invoke "as-binary-operand" (i32.const 1) (i32.const 0)) (i32.const -15))
+(assert_return (invoke "as-binary-operand" (i32.const 1) (i32.const 1)) (i32.const 12))
+
+(assert_return (invoke "as-test-operand" (i32.const 0)) (i32.const 1))
+(assert_return (invoke "as-test-operand" (i32.const 1)) (i32.const 0))
+
+(assert_return (invoke "as-compare-operand" (i32.const 0) (i32.const 0)) (i32.const 1))
+(assert_return (invoke "as-compare-operand" (i32.const 0) (i32.const 1)) (i32.const 0))
+(assert_return (invoke "as-compare-operand" (i32.const 1) (i32.const 0)) (i32.const 1))
+(assert_return (invoke "as-compare-operand" (i32.const 1) (i32.const 1)) (i32.const 0))
+
+(assert_return (invoke "break-bare") (i32.const 19))
+(assert_return (invoke "break-value" (i32.const 1)) (i32.const 18))
+(assert_return (invoke "break-value" (i32.const 0)) (i32.const 21))
+
+(assert_return (invoke "effects" (i32.const 1)) (i32.const -14))
+(assert_return (invoke "effects" (i32.const 0)) (i32.const -6))

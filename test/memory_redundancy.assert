@@ -1,0 +1,11 @@
+;; Test that optimizers don't do redundant-load, store-to-load, or dead-store
+;; optimizations when there are interfering stores, even of different types
+;; and to non-identical addresses.
+
+(assert_return (invoke "test_store_to_load") (i32.const 0x00000080))
+(invoke "zero_everything")
+(assert_return (invoke "test_redundant_load") (i32.const 0x00000080))
+(invoke "zero_everything")
+(assert_return (invoke "test_dead_store") (f32.const 0x1.18p-144))
+(invoke "zero_everything")
+(assert_return (invoke "malloc_aliasing") (i32.const 43))

@@ -1,0 +1,59 @@
+;; Test `call_indirect` operator
+
+(assert_return (invoke "type-i32") (i32.const 0x132))
+(assert_return (invoke "type-i64") (i64.const 0x164))
+(assert_return (invoke "type-f32") (f32.const 0xf32))
+(assert_return (invoke "type-f64") (f64.const 0xf64))
+
+(assert_return (invoke "type-index") (i64.const 100))
+
+(assert_return (invoke "type-first-i32") (i32.const 32))
+(assert_return (invoke "type-first-i64") (i64.const 64))
+(assert_return (invoke "type-first-f32") (f32.const 1.32))
+(assert_return (invoke "type-first-f64") (f64.const 1.64))
+
+(assert_return (invoke "type-second-i32") (i32.const 32))
+(assert_return (invoke "type-second-i64") (i64.const 64))
+(assert_return (invoke "type-second-f32") (f32.const 32))
+(assert_return (invoke "type-second-f64") (f64.const 64.1))
+
+(assert_return (invoke "dispatch" (i32.const 5) (i64.const 2)) (i64.const 2))
+(assert_return (invoke "dispatch" (i32.const 5) (i64.const 5)) (i64.const 5))
+(assert_return (invoke "dispatch" (i32.const 12) (i64.const 5)) (i64.const 120))
+(assert_return (invoke "dispatch" (i32.const 13) (i64.const 5)) (i64.const 8))
+(assert_return (invoke "dispatch" (i32.const 20) (i64.const 2)) (i64.const 2))
+(assert_trap (invoke "dispatch" (i32.const 0) (i64.const 2)) "indirect call signature mismatch")
+(assert_trap (invoke "dispatch" (i32.const 15) (i64.const 2)) "indirect call signature mismatch")
+(assert_trap (invoke "dispatch" (i32.const 23) (i64.const 2)) "undefined element")
+(assert_trap (invoke "dispatch" (i32.const -1) (i64.const 2)) "undefined element")
+(assert_trap (invoke "dispatch" (i32.const 1213432423) (i64.const 2)) "undefined element")
+
+(assert_return (invoke "dispatch-structural" (i32.const 5)) (i64.const 9))
+(assert_return (invoke "dispatch-structural" (i32.const 5)) (i64.const 9))
+(assert_return (invoke "dispatch-structural" (i32.const 12)) (i64.const 362880))
+(assert_return (invoke "dispatch-structural" (i32.const 20)) (i64.const 9))
+(assert_trap (invoke "dispatch-structural" (i32.const 11)) "indirect call signature mismatch")
+(assert_trap (invoke "dispatch-structural" (i32.const 22)) "indirect call signature mismatch")
+
+(assert_return (invoke "fac" (i64.const 0)) (i64.const 1))
+(assert_return (invoke "fac" (i64.const 1)) (i64.const 1))
+(assert_return (invoke "fac" (i64.const 5)) (i64.const 120))
+(assert_return (invoke "fac" (i64.const 25)) (i64.const 7034535277573963776))
+
+(assert_return (invoke "fib" (i64.const 0)) (i64.const 1))
+(assert_return (invoke "fib" (i64.const 1)) (i64.const 1))
+(assert_return (invoke "fib" (i64.const 2)) (i64.const 2))
+(assert_return (invoke "fib" (i64.const 5)) (i64.const 8))
+(assert_return (invoke "fib" (i64.const 20)) (i64.const 10946))
+
+(assert_return (invoke "even" (i32.const 0)) (i32.const 44))
+(assert_return (invoke "even" (i32.const 1)) (i32.const 99))
+(assert_return (invoke "even" (i32.const 100)) (i32.const 44))
+(assert_return (invoke "even" (i32.const 77)) (i32.const 99))
+(assert_return (invoke "odd" (i32.const 0)) (i32.const 99))
+(assert_return (invoke "odd" (i32.const 1)) (i32.const 44))
+(assert_return (invoke "odd" (i32.const 200)) (i32.const 99))
+(assert_return (invoke "odd" (i32.const 77)) (i32.const 44))
+
+(assert_exhaustion (invoke "runaway") "call stack exhausted")
+(assert_exhaustion (invoke "mutual-runaway") "call stack exhausted")
