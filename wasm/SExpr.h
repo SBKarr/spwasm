@@ -14,38 +14,38 @@
  * limitations under the License.
  */
 
-#ifndef EXEC_TESTENVIRONMENT_H_
-#define EXEC_TESTENVIRONMENT_H_
+#ifndef EXEC_SEXPR_H_
+#define EXEC_SEXPR_H_
 
-#include "wasm/ThreadedRuntime.h"
-#include "SExpr.h"
+#include "wasm/Utils.h"
 
-namespace wasm {
-namespace test {
+namespace sexpr {
 
-class TestEnvironment : public Environment {
-public:
-	struct Test {
-		String name;
-		String data;
-		Vector<sexpr::Token> list;
+using StringView = wasm::StringView;
+
+template <typename T>
+using Vector = wasm::Vector<T>;
+
+struct Token {
+	enum Kind {
+		Word,
+		List
 	};
 
-	static TestEnvironment *getInstance();
+	Token() = default;
 
-	TestEnvironment();
+	explicit Token(StringView t) : kind(Word), token(t) { }
+	explicit Token(Kind k) : kind(k) { }
 
-	bool run();
-	bool loadAsserts(const StringView &, const uint8_t *, size_t);
-
-protected:
-	bool runTest(wasm::ThreadedRuntime &, const Test &);
-
-	HostModule *_testModule = nullptr;
-	Vector<Test> _tests;
+	Kind kind = Word;
+	StringView token;
+	Vector<Token> vec;
 };
 
-}
+Vector<Token> parse(StringView);
+void print(std::ostream &, const Token &);
+void print(std::ostream &, const Vector<Token> &);
+
 }
 
-#endif /* EXEC_TESTENVIRONMENT_H_ */
+#endif /* EXEC_SEXPR_H_ */

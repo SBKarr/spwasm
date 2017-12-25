@@ -18,11 +18,11 @@
 #ifndef WABT_STRING_VIEW_H_
 #define WABT_STRING_VIEW_H_
 
+#include "Std.h"
+
 #include <cassert>
 #include <iterator>
 #include <limits>
-
-#include "Std.h"
 
 namespace wasm {
 

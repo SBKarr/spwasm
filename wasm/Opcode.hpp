@@ -219,6 +219,9 @@ WABT_OPCODE(I64, I64, ___, ___, 0, 0,     0xC2, I64Extend8S, "i64.extend8_s")
 WABT_OPCODE(I64, I64, ___, ___, 0, 0,     0xC3, I64Extend16S, "i64.extend16_s")
 WABT_OPCODE(I64, I64, ___, ___, 0, 0,     0xC4, I64Extend32S, "i64.extend32_s")
 
+WABT_OPCODE(___, ___, ___, ___, 0, 0,     0xe0, InterpSetStack, "set_stackp")
+WABT_OPCODE(___, ___, ___, ___, 0, 0,     0xe1, InterpGetStack, "get_stackp")
+
 WABT_OPCODE(I32, F32, ___, ___, 0, 0xfc,  0x00, I32TruncSSatF32, "i32.trunc_s:sat/f32")
 WABT_OPCODE(I32, F32, ___, ___, 0, 0xfc,  0x01, I32TruncUSatF32, "i32.trunc_u:sat/f32")
 WABT_OPCODE(I32, F64, ___, ___, 0, 0xfc,  0x02, I32TruncSSatF64, "i32.trunc_s:sat/f64")

@@ -14,30 +14,25 @@
  * limitations under the License.
  */
 
-#ifndef SRC_STD_H_
-#define SRC_STD_H_
+#ifndef EXTENSIONS_SPWASM_STAPPLER_SRC_SPWASMSTD_H_
+#define EXTENSIONS_SPWASM_STAPPLER_SRC_SPWASMSTD_H_
 
-#include <type_traits>
-#include <vector>
-#include <string>
-#include <sstream>
-#include <map>
-#include <functional>
+#include "SPCommon.h"
 
 namespace wasm {
 
 template <typename T>
-using Vector = std::vector<T>;
+using Vector = stappler::memory::PoolInterface::VectorType<T>;
 
 template <typename T>
-using Function = std::function<T>;
+using Function = stappler::memory::function<T>;
 
 template <typename K, typename V>
-using Map = std::map<K, V, std::less<>>;
+using Map = stappler::memory::PoolInterface::MapType<K, V, std::less<>>;
 
-using String = std::string;
-using StringStream = std::ostringstream;
+using String = stappler::memory::PoolInterface::StringType;
+using StringStream = stappler::memory::PoolInterface::StringStreamType;
 
 }
 
-#endif /* SRC_STD_H_ */
+#endif /* EXTENSIONS_SPWASM_STAPPLER_SRC_SPWASMSTD_H_ */

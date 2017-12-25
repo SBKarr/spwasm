@@ -24,10 +24,35 @@
 #include "Module.h"
 #include "Environment.h"
 
-constexpr auto MAX_U32_LEB128_BYTES = 5;
-constexpr auto MAX_U64_LEB128_BYTES = 10;
+#define CHECK_RESULT(expr) do { if (expr == ::wasm::Result::Error) { return ::wasm::Result::Error; } } while (0)
+
+#define PRINT_CONTENT 0
+
+#if (PRINT_CONTENT)
+#define BINARY_PRINTF(...) printf(VA_ARGS)
+#else
+#define BINARY_PRINTF(...)
+#endif
+
+#include "BinaryCustom.cc"
+#include "BinaryData.cc"
+#include "BinaryObjects.cc"
+#include "BinarySource.cc"
 
 namespace wasm {
+
+constexpr auto WABT_BINARY_MAGIC = 0x6d736100;
+constexpr auto WABT_BINARY_VERSION = 1;
+constexpr auto WABT_BINARY_LIMITS_HAS_MAX_FLAG = 0x1;
+constexpr auto WABT_BINARY_LIMITS_IS_SHARED_FLAG = 0x2;
+
+constexpr auto WABT_BINARY_SECTION_NAME = "name";
+constexpr auto WABT_BINARY_SECTION_RELOC = "reloc";
+constexpr auto WABT_BINARY_SECTION_LINKING = "linking";
+constexpr auto WABT_BINARY_SECTION_EXCEPTION = "exception";
+
+constexpr auto MAX_U32_LEB128_BYTES = 5;
+constexpr auto MAX_U64_LEB128_BYTES = 10;
 
 Offset U32Leb128Length(uint32_t value) {
 	uint32_t size = 0;
@@ -1979,11 +2004,11 @@ bool ModuleReader::init(Module *module, Environment *env, const uint8_t *data, s
 	_state = ReaderState(data, size);
 	_env = env;
 	_targetModule = module;
+	_options = &opts;
 
 	_opcodes.reserve(256);
 	_labels.reserve(32);
 	_labelStack.reserve(32);
-	_jumpTable.reserve(32);
 
 	_typechecker.set_error_callback([this] (StringStream &message) {
 		if (!_env) {

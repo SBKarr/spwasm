@@ -17,14 +17,6 @@
 #include "Binary.h"
 #include "Module.h"
 
-#define PRINT_CONTENT 0
-
-#if (PRINT_CONTENT)
-#define BINARY_PRINTF(...) printf(__VA_ARGS__)
-#else
-#define BINARY_PRINTF
-#endif
-
 namespace wasm {
 
 static void printType(std::ostream &stream, Type t) {
@@ -189,6 +181,9 @@ Result ModuleReader::BeginGlobal(Index index, Type type, bool mut) {
 	BINARY_PRINTF("%s\n", __FUNCTION__);
 	_targetModule->_globals.emplace_back(type, mut);
 	_targetModule->_globalIndex.emplace_back(_targetModule->_globals.size() - 1, false);
+	if (_options->features.isStackPointerEnabled() && _targetModule->_stackPointer == kInvalidIndex && mut == true) {
+		_targetModule->_stackPointer = _targetModule->_globalIndex.size() - 1;
+	}
 	return Result::Ok;
 }
 Result ModuleReader::BeginGlobalInitExpr(Index index) {

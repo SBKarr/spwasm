@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "RuntimeEnvironment.h"
+#include "ThreadedRuntime.h"
 
 namespace wasm {
 
@@ -86,7 +86,7 @@ bool ThreadedRuntime::call(const RuntimeModule &module, const Func &func, Vector
 }
 
 bool ThreadedRuntime::call(const RuntimeModule &module, const Func &func, Value *paramsInOut) {
-	auto result = _mainThread.Run(&module, &func, paramsInOut);
+	auto result = _mainThread.Run(module, func, paramsInOut);
 	if (result == Thread::Result::Returned || result == Thread::Result::Ok) {
 		return true;
 	}
@@ -127,6 +127,9 @@ bool ThreadedRuntime::call(const RuntimeModule &module, const Func &func, Value 
 			break;
 		case Thread::Result::TrapValueStackExhausted:
 			stream << "Execution failed: value stack exhausted, ran out of value stack space";
+			break;
+		case Thread::Result::TrapUserStackExhausted:
+			stream << "Execution failed: user stack exhausted";
 			break;
 		case Thread::Result::TrapHostResultTypeMismatch:
 			stream << "Execution failed: host result type mismatch";
@@ -174,7 +177,7 @@ Thread::Result ThreadedRuntime::callSafe(const RuntimeModule &module, const Func
 }
 Thread::Result ThreadedRuntime::callSafe(const RuntimeModule &module, const Func &func, Value *paramsInOut) {
 	_silent = true;
-	auto res = _mainThread.Run(&module, &func, paramsInOut);
+	auto res = _mainThread.Run(module, func, paramsInOut);
 	_silent = false;
 	return res;
 }

@@ -14,38 +14,38 @@
  * limitations under the License.
  */
 
-#ifndef EXEC_SEXPR_H_
-#define EXEC_SEXPR_H_
+#ifndef SRC_STD_H_
+#define SRC_STD_H_
 
-#include "src/Utils.h"
+#if STAPPLER
 
-namespace sexpr {
+#include "SPWasmStd.h"
 
-using StringView = wasm::StringView;
+#else
+
+#include <type_traits>
+#include <vector>
+#include <string>
+#include <sstream>
+#include <map>
+#include <functional>
+
+namespace wasm {
 
 template <typename T>
-using Vector = wasm::Vector<T>;
+using Vector = std::vector<T>;
 
-struct Token {
-	enum Kind {
-		Word,
-		List
-	};
+template <typename T>
+using Function = std::function<T>;
 
-	Token() = default;
+template <typename K, typename V>
+using Map = std::map<K, V, std::less<>>;
 
-	explicit Token(StringView t) : kind(Word), token(t) { }
-	explicit Token(Kind k) : kind(k) { }
-
-	Kind kind = Word;
-	StringView token;
-	Vector<Token> vec;
-};
-
-Vector<Token> parse(StringView);
-void print(std::ostream &, const Token &);
-void print(std::ostream &, const Vector<Token> &);
+using String = std::string;
+using StringStream = std::ostringstream;
 
 }
 
-#endif /* EXEC_SEXPR_H_ */
+#endif
+
+#endif /* SRC_STD_H_ */

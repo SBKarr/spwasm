@@ -18,13 +18,13 @@
 #ifndef SRC_UTILS_H_
 #define SRC_UTILS_H_
 
+#include "Std.h"
+#include "StringView.h"
+
 #include <stddef.h>
 #include <type_traits>
 #include <assert.h>
 #include <string.h>
-
-#include "Std.h"
-#include "StringView.h"
 
 #define WASM_ASSERT(val) assert(val)
 
@@ -54,7 +54,7 @@ static constexpr auto WABT_PAGE_SIZE = 0x10000; /* 64k */
 static constexpr auto WABT_MAX_PAGES = 0x10000; /* # of pages that fit in 32-bit address space */
 
 struct Limits {
-	uint64_t initial = 0;
+	mutable uint64_t initial = 0;
 	uint64_t max = 0;
 	bool has_max = false;
 	bool is_shared = false;
@@ -143,20 +143,25 @@ public:
 		_exceptionsEnabled = true;
 		_satFloatToIntEnabled = true;
 		_threadsEnabled = true;
+		_script_stackPointerEnabled = true;
 	}
 
 	bool isExceptionsEnabled() const { return _exceptionsEnabled; }
 	bool isSatFloatToIntEnabled() const { return _satFloatToIntEnabled; }
 	bool isThreadsEnabled() const { return _threadsEnabled; }
+	bool isStackPointerEnabled() const { return _script_stackPointerEnabled; }
 
 	void setExceptionsEnabled(bool value) { _exceptionsEnabled = value; }
 	void setSatFloatToIntEnabled(bool value) { _satFloatToIntEnabled = value; }
 	void setThreadsEnabled(bool value) { _threadsEnabled = value; }
+	void setStackPointer(bool value) { _script_stackPointerEnabled = value; }
 
 private:
 	bool _exceptionsEnabled = false;
 	bool _satFloatToIntEnabled = false;
 	bool _threadsEnabled = false;
+
+	bool _script_stackPointerEnabled = false;
 };
 
 struct ReadOptions {
@@ -201,6 +206,8 @@ union Value {
 
 	float asFloat() { float ret; memcpy(&ret, &f32_bits, sizeof(float)); return ret; }
 	double asDouble() { double ret; memcpy(&ret, &f64_bits, sizeof(double)); return ret; }
+	int32_t asInt32() { int32_t ret; memcpy(&ret, &i32, sizeof(int32_t)); return ret; }
+	int64_t asInt64() { int64_t ret; memcpy(&ret, &i64, sizeof(int64_t)); return ret; }
 };
 
 struct TypedValue {

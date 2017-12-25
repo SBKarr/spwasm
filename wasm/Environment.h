@@ -43,13 +43,26 @@ struct HostModule {
 	Map<String, HostFunc> funcs;
 
 	void addGlobal(const StringView &, TypedValue &&value, bool mut);
-	void addFunc(const StringView &, TypeInitList params, TypeInitList results, HostFuncCallback, void *ctx = nullptr);
+	void addFunc(const StringView &, HostFuncCallback, TypeInitList params, TypeInitList results, void *ctx = nullptr);
 };
 
 struct RuntimeMemory {
+	enum class Action {
+		Alloc,
+		Realloc,
+		Free
+	};
+
 	Limits limits;
-	Vector<uint8_t> data;
+	mutable uint8_t *data = nullptr;
+	mutable uint32_t size = 0;
 	Index userDataOffset = 0;
+	mutable void *ctx = nullptr;
+
+	uint8_t *get(Index offset) const;
+	uint8_t *get(Index offset, Index size) const;
+
+	void print(std::ostream &stream, uint32_t address, uint32_t size) const;
 };
 
 struct RuntimeTable {
@@ -80,6 +93,8 @@ struct LinkingPolicy {
 	using InitMemoryCallback = bool (*) (const StringView &module, const StringView &env, RuntimeMemory &target, void *);
 	using InitTableCallback = bool (*) (const StringView &module, const StringView &env, RuntimeTable &target, void *);
 
+	using AllocatorFn = bool (*) (const RuntimeMemory &, uint32_t, RuntimeMemory::Action, void *);
+
 	ImportFuncCallback func;
 	ImportGlobalCallback global;
 	ImportMemoryCallback memory;
@@ -88,22 +103,28 @@ struct LinkingPolicy {
 	InitMemoryCallback memoryInit;
 	InitTableCallback tableInit;
 
+	AllocatorFn allocator = nullptr;
+
 	void *context = nullptr;
 };
 
 class Runtime {
 public:
-	virtual ~Runtime() { }
+	using AllocatorFn = bool (*) (const RuntimeMemory &, uint32_t, RuntimeMemory::Action, void *);
+
+	virtual ~Runtime();
 
 	bool init(const Environment *, const LinkingPolicy &);
 
 	RuntimeModule *getModule(const StringView &);
 	const RuntimeModule *getModule(const StringView &) const;
 
+	const Map<String, RuntimeModule> &getModules() const;
+
 	const RuntimeModule *getModule(const Module *) const;
 
-	bool isSignatureMatch(const Module::Signature &, const std::pair<const Func *, const HostFunc *> &func) const;
-	bool isSignatureMatch(const Module::Signature &, const Module::Signature &) const;
+	bool isSignatureMatch(const Module::Signature &, const std::pair<const Func *, const HostFunc *> &func, bool silent = false) const;
+	bool isSignatureMatch(const Module::Signature &, const Module::Signature &, bool silent = false) const;
 
 	StringView getModuleName(const RuntimeModule *) const;
 	std::pair<Index, StringView> getModuleFunctionName(const RuntimeModule &, const Func *) const;
@@ -115,6 +136,11 @@ public:
 
 	virtual void onError(StringStream &) const;
 	virtual void onThreadError(const Thread &) const;
+
+	bool growMemory(const RuntimeMemory &, Index pages) const;
+
+	const Vector<RuntimeTable> &getRuntimeTables() const;
+	const Vector<RuntimeMemory> &getRuntimeMemory() const;
 
 protected:
 	bool performCall(const RuntimeModule *module, Index func, Value *buf, Index initialSize);
@@ -130,10 +156,10 @@ protected:
 
 	bool loadRuntime(const LinkingPolicy &);
 
-	void initMemory(RuntimeMemory &);
+	bool initMemory(RuntimeMemory &);
 	bool emplaceMemoryData(RuntimeMemory &, const Module::Data &);
 
-	void initTable(RuntimeTable &);
+	bool initTable(RuntimeTable &);
 	bool emplaceTableElements(RuntimeTable &, const Module::Elements &);
 
 	bool _lazyInit = false;
@@ -141,6 +167,8 @@ protected:
 	Map<String, RuntimeModule> _modules;
 	Map<const Module *, const RuntimeModule *> _runtimeModules;
 
+	void *_linkingContext = nullptr;
+	AllocatorFn _memoryCallback;
 	Vector<RuntimeTable> _tables;
 	Vector<RuntimeMemory> _memory;
 	Vector<RuntimeGlobal> _globals;
@@ -149,11 +177,17 @@ protected:
 
 class Environment {
 public:
+	using ErrorCallback = Function<void(const StringView &, const StringStream &)>;
+
 	Environment();
 
 	Module * loadModule(const StringView &, const uint8_t *, size_t, const ReadOptions & = ReadOptions());
+	Module * loadModule(const StringView &, ModuleReader &, const uint8_t *, size_t, const ReadOptions & = ReadOptions());
 	HostModule * makeHostModule(const StringView &);
-	HostModule * getEnvModule();
+	HostModule * getEnvModule() const;
+
+	void setErrorCallback(const ErrorCallback &);
+	const ErrorCallback &getErrorCallback() const;
 
 	const Map<String, Module> &getExternalModules() const;
 	const Map<String, HostModule> &getHostModules() const;
@@ -168,6 +202,7 @@ public:
 private:
 	bool getGlobalValueRecursive(TypedValue &, const StringView &module, const StringView &field, Index depth) const;
 
+	ErrorCallback _errorCallback;
 	HostModule *_envModule = nullptr;
 	Map<String, HostModule> _hostModules;
 	Map<String, Module> _externalModules;

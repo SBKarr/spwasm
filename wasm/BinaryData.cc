@@ -18,14 +18,6 @@
 #include "Module.h"
 #include "Environment.h"
 
-#define PRINT_CONTENT 0
-
-#if (PRINT_CONTENT)
-#define BINARY_PRINTF(...) printf(VA_ARGS)
-#else
-#define BINARY_PRINTF
-#endif
-
 namespace wasm {
 
 /* Elem section */

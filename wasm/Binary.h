@@ -23,16 +23,6 @@
 
 namespace wasm {
 
-constexpr auto WABT_BINARY_MAGIC = 0x6d736100;
-constexpr auto WABT_BINARY_VERSION = 1;
-constexpr auto WABT_BINARY_LIMITS_HAS_MAX_FLAG = 0x1;
-constexpr auto WABT_BINARY_LIMITS_IS_SHARED_FLAG = 0x2;
-
-constexpr auto WABT_BINARY_SECTION_NAME = "name";
-constexpr auto WABT_BINARY_SECTION_RELOC = "reloc";
-constexpr auto WABT_BINARY_SECTION_LINKING = "linking";
-constexpr auto WABT_BINARY_SECTION_EXCEPTION = "exception";
-
 struct ReaderState {
 	ReaderState() = default;
 	ReaderState(const uint8_t* data, Offset size) : data(data), size(size) { }
@@ -244,6 +234,7 @@ protected:
 
 	Environment *_env = nullptr;
 	Module *_targetModule = nullptr;
+	const ReadOptions *_options = nullptr;
 	ReaderState _state;
 	TypedValue _initExprValue;
 
@@ -253,7 +244,6 @@ protected:
 	Vector<Func::OpcodeRec> _opcodes;
 	Vector<Func::Label> _labels;
 	Vector<Index> _labelStack;
-	Vector<Index> _jumpTable;
 };
 
 template <typename Callback>

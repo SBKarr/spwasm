@@ -66,6 +66,9 @@ static void printIndent(std::ostream &stream, Index indent) {
 static void printFunctionData(std::ostream &stream, const Func &it, Index indent) {
 	size_t j = 0;
 	printIndent(stream, indent);
+	if (!it.name.empty()) {
+		stream << it.name << ": ";
+	}
 	stream << "Code (" << it.opcodes.size() << ")\n";
 	for (auto &opcodeIt : it.opcodes) {
 		printIndent(stream, indent);
@@ -169,6 +172,10 @@ bool Module::init(const uint8_t *data, size_t size, const ReadOptions &opts) {
 
 bool Module::init(Environment *env, const uint8_t *data, size_t size, const ReadOptions &opts) {
 	wasm::ModuleReader reader;
+	return init(env, reader, data, size, opts);
+}
+
+bool Module::init(Environment *env, ModuleReader &reader, const uint8_t *data, size_t size, const ReadOptions &opts) {
 	return reader.init(this, env, data, size, opts);
 }
 
@@ -378,6 +385,10 @@ const Vector<Module::Data> &Module::getMemoryData() const {
 	return _data;
 }
 
+Offset Module::getLinkingOffset() const {
+	return _dataSize;
+}
+
 void Func::printInfo(std::ostream &stream) const {
 	printSignature(stream, *sig);
 	stream << "\n";
@@ -428,6 +439,8 @@ void Module::printInfo(std::ostream &stream) const {
 				if (it.table.limits.is_shared) {
 					stream << " shared";
 				}
+				break;
+			default:
 				break;
 			}
 			stream << "\n";

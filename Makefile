@@ -60,14 +60,14 @@ GLOBAL_AR ?= ar rcs
 # lib sources
 # recursive source files
 LIB_SRCS_DIRS += \
-	src
+	wasm
 
 # individual source files
 LIB_SRCS_OBJS += \
 
 # recursive includes
 LIB_INCLUDES_DIRS += \
-	src
+	wasm
 
 # individual includes
 LIB_INCLUDES_OBJS += \
@@ -88,12 +88,12 @@ EXEC_SRCS_OBJS += \
 
 # search for sources
 LIB_SRCS := \
-	$(foreach dir,$(LIB_SRCS_DIRS),$(shell find $(GLOBAL_ROOT)/$(dir) -name '*.c*')) \
+	$(foreach dir,$(LIB_SRCS_DIRS),$(shell find $(GLOBAL_ROOT)/$(dir) -name '*.cpp')) \
 	$(addprefix $(GLOBAL_ROOT)/,$(LIB_SRCS_OBJS))
 
 # search for sources
 EXEC_SRCS := \
-	$(foreach dir,$(EXEC_SRCS_DIRS),$(shell find $(GLOBAL_ROOT)/$(dir) -name '*.c*')) \
+	$(foreach dir,$(EXEC_SRCS_DIRS),$(shell find $(GLOBAL_ROOT)/$(dir) -name '*.cpp')) \
 	$(addprefix $(GLOBAL_ROOT)/,$(EXEC_SRCS_OBJS))
 
 # search for includes
@@ -102,10 +102,10 @@ LIB_INCLUDES := \
 	$(addprefix $(GLOBAL_ROOT)/,$(LIB_INCLUDES_OBJS))
 
 # build object list to compile
-LIB_OBJS := $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(patsubst %.cpp,%.o,$(patsubst $(GLOBAL_ROOT)/%,$(OUTPUT_DIR)/%,$(LIB_SRCS)))))
+LIB_OBJS := $(patsubst %.cpp,%.o,$(patsubst $(GLOBAL_ROOT)/%,$(OUTPUT_DIR)/%,$(LIB_SRCS)))
 
 # build object list to compile
-EXEC_OBJS := $(patsubst %.c,%.o,$(patsubst %.cc,%.o,$(patsubst %.cpp,%.o,$(patsubst $(GLOBAL_ROOT)/%,$(OUTPUT_DIR)/%,$(EXEC_SRCS)))))
+EXEC_OBJS := $(patsubst %.cpp,%.o,$(patsubst $(GLOBAL_ROOT)/%,$(OUTPUT_DIR)/%,$(EXEC_SRCS)))
 
 # build directory list to create
 LIB_DIRS := $(sort $(dir $(LIB_OBJS)))

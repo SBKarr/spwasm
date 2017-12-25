@@ -20,19 +20,37 @@
 
 namespace wasm {
 
+static void Runtime_free_mem(RuntimeMemory &mem) {
+	delete [] mem.data;
+	mem.data = nullptr;
+	mem.size = 0;
+}
+
+static void Runtime_alloc_mem(RuntimeMemory &mem) {
+	mem.data = new uint8_t[mem.limits.initial * WABT_PAGE_SIZE];
+	memset(mem.data, 0, mem.limits.initial);
+	mem.size = mem.limits.initial * WABT_PAGE_SIZE;
+}
+
+static void Runtime_realloc_mem(const RuntimeMemory &mem, uint32_t new_size) {
+	auto newData = new uint8_t[new_size];
+	auto oldData = mem.data;
+	memcpy(newData, oldData, mem.size);
+	memset(newData + mem.size, 0, new_size - mem.size);
+	mem.data = newData;
+	mem.size = new_size;
+	delete [] oldData;
+}
+
 HostFunc::HostFunc(TypeInitList params, TypeInitList results, HostFuncCallback cb, void *ctx)
 : sig(params, results), callback(cb), ctx(ctx) { }
 
 void HostModule::addGlobal(const StringView &str, TypedValue &&value, bool mut) {
-	globals.emplace(std::piecewise_construct,
-			std::forward_as_tuple(String(str.data(), str.size())),
-			std::forward_as_tuple(std::move(value), mut));
+	globals.emplace(String(str.data(), str.size()), RuntimeGlobal(std::move(value), mut));
 }
 
-void HostModule::addFunc(const StringView &str, TypeInitList params, TypeInitList results, HostFuncCallback cb, void *ctx) {
-	funcs.emplace(std::piecewise_construct,
-			std::forward_as_tuple(String(str.data(), str.size())),
-			std::forward_as_tuple(params, results, cb, ctx));
+void HostModule::addFunc(const StringView &str, HostFuncCallback cb, TypeInitList params, TypeInitList results, void *ctx) {
+	funcs.emplace(String(str.data(), str.size()), HostFunc(params, results, cb, ctx));
 }
 
 Environment::Environment() {
@@ -48,14 +66,31 @@ Module * Environment::loadModule(const StringView &name, const uint8_t *data, si
 	}
 	return nullptr;
 }
+Module * Environment::loadModule(const StringView &name, ModuleReader &reader, const uint8_t *data, size_t size, const ReadOptions &opts) {
+	auto it = _externalModules.emplace(String(name.data(), name.size()), Module()).first;
+	if (it->second.init(this, reader, data, size, opts)) {
+		return &it->second;
+	} else {
+		_externalModules.erase(it);
+	}
+	return nullptr;
+}
 
 HostModule * Environment::makeHostModule(const StringView &name) {
 	auto it = _hostModules.emplace(String(name.data(), name.size()), HostModule()).first;
 	return &it->second;
 }
 
-HostModule * Environment::getEnvModule() {
+HostModule * Environment::getEnvModule() const {
 	return _envModule;
+}
+
+
+void Environment::setErrorCallback(const ErrorCallback &cb) {
+	_errorCallback = cb;
+}
+const Environment::ErrorCallback &Environment::getErrorCallback() const {
+	return _errorCallback;
 }
 
 const Map<String, Module> &Environment::getExternalModules() const {
@@ -71,7 +106,11 @@ bool Environment::getGlobalValue(TypedValue &value, const StringView &module, co
 }
 
 void Environment::onError(const StringView &tag, const StringStream &stream) const {
-	printf("Error: %.*s: %s\n", int(tag.size()), tag.data(), stream.str().data());
+	if (!_errorCallback) {
+		printf("Error: %.*s: %s\n", int(tag.size()), tag.data(), stream.str().data());
+	} else {
+		_errorCallback(tag, stream);
+	}
 }
 
 bool Environment::getGlobalValueRecursive(TypedValue &value, const StringView &module, const StringView &field, Index depth) const {
@@ -114,8 +153,23 @@ bool Environment::getGlobalValueRecursive(TypedValue &value, const StringView &m
 }
 
 
+Runtime::~Runtime() {
+	for (auto &it : _memory) {
+		if (_memoryCallback) {
+			_memoryCallback(it, 0, RuntimeMemory::Action::Free, _linkingContext);
+		} else {
+			Runtime_free_mem(it);
+		}
+	}
+}
+
 bool Runtime::init(const Environment *env, const LinkingPolicy &policy) {
 	_env = env;
+
+	if (policy.allocator) {
+		_memoryCallback = policy.allocator;
+		_linkingContext = policy.context;
+	}
 
 	performPreLink();
 
@@ -140,6 +194,10 @@ const RuntimeModule *Runtime::getModule(const StringView &name) const {
 		return &it->second;
 	}
 	return nullptr;
+}
+
+const Map<String, RuntimeModule> &Runtime::getModules() const {
+	return _modules;
 }
 
 const RuntimeModule *Runtime::getModule(const Module *mod) const {
@@ -196,6 +254,8 @@ void Runtime::performPreLink() {
 				case ExternalKind::Table:
 					mod->exports.emplace(importIt.field, std::make_pair(kInvalidIndex, ExternalKind::Table));
 					++ tableCount;
+					break;
+				default:
 					break;
 				}
 			}
@@ -645,25 +705,27 @@ bool Runtime::processTableImport(const LinkingPolicy &policy, RuntimeModule &mod
 	});
 }
 
-bool Runtime::isSignatureMatch(const Module::Signature &sig, const std::pair<const Func *, const HostFunc *> &func) const {
+bool Runtime::isSignatureMatch(const Module::Signature &sig, const std::pair<const Func *, const HostFunc *> &func, bool silent) const {
 	if (func.second) {
-		return isSignatureMatch(sig, func.second->sig);
+		return isSignatureMatch(sig, func.second->sig, silent);
 	} else if (func.first) {
-		return isSignatureMatch(sig, *func.first->sig);
+		return isSignatureMatch(sig, *func.first->sig, silent);
 	}
 	return false;
 }
 
-bool Runtime::isSignatureMatch(const Module::Signature &sig1, const Module::Signature &sig2) const {
+bool Runtime::isSignatureMatch(const Module::Signature &sig1, const Module::Signature &sig2, bool silent) const {
 	if (sig1.params == sig2.params && sig1.results == sig2.results) {
 		return true;
 	} else {
-		pushErrorStream([&] (std::ostream &stream) {
-			stream << "Signature matching failed: ";
-			sig1.printInfo(stream);
-			stream << " vs ";
-			sig2.printInfo(stream);
-		});
+		if (!silent) {
+			pushErrorStream([&] (std::ostream &stream) {
+				stream << "Signature matching failed: ";
+				sig1.printInfo(stream);
+				stream << " vs ";
+				sig2.printInfo(stream);
+			});
+		}
 		return false;
 	}
 }
@@ -719,6 +781,35 @@ void Runtime::onThreadError(const Thread &thread) const {
 	pushErrorStream([&] (std::ostream &s) {
 		thread.PrintStackTrace(s);
 	});
+}
+
+bool Runtime::growMemory(const RuntimeMemory &memory, Index grow_pages) const {
+	uint32_t old_page_size = memory.limits.initial;
+	uint32_t new_page_size = old_page_size + grow_pages;
+	uint32_t max_page_size = memory.limits.has_max ? memory.limits.max : WABT_MAX_PAGES;
+	if (new_page_size > max_page_size) {
+		return false;
+	}
+	if (static_cast<uint64_t>(new_page_size) * WABT_PAGE_SIZE > UINT32_MAX) {
+		return false;
+	}
+	if (_memoryCallback) {
+		if (!_memoryCallback(memory, new_page_size * WABT_PAGE_SIZE, RuntimeMemory::Action::Realloc, _linkingContext)) {
+			return false;
+		}
+	} else {
+		Runtime_realloc_mem(memory, new_page_size * WABT_PAGE_SIZE);
+	}
+	memory.limits.initial = new_page_size;
+	return true;
+}
+
+const Vector<RuntimeTable> &Runtime::getRuntimeTables() const {
+	return _tables;
+}
+
+const Vector<RuntimeMemory> &Runtime::getRuntimeMemory() const {
+	return _memory;
 }
 
 bool Runtime::loadRuntime(const LinkingPolicy &policy) {
@@ -780,33 +871,47 @@ bool Runtime::loadRuntime(const LinkingPolicy &policy) {
 	return true;
 }
 
-void Runtime::initMemory(RuntimeMemory &memory) {
-	memory.data.resize(memory.limits.initial * WABT_PAGE_SIZE);
+bool Runtime::initMemory(RuntimeMemory &memory) {
+	if (_memoryCallback) {
+		if (!_memoryCallback(memory, memory.limits.initial * WABT_PAGE_SIZE, RuntimeMemory::Action::Alloc, _linkingContext)) {
+			return false;
+		}
+	} else {
+		Runtime_alloc_mem(memory);
+	}
+	return true;
 }
 
+static constexpr size_t ALIGN(size_t size, uint32_t boundary) { return (((size) + ((boundary) - 1)) & ~((boundary) - 1)); }
+
 bool Runtime::emplaceMemoryData(RuntimeMemory &memory, const Module::Data &data) {
-	if (memory.data.empty() && !data.data.empty() && data.offset == 0 && data.data.size() < WABT_PAGE_SIZE) {
-		memory.data.resize(1 * WABT_PAGE_SIZE);
+	if (!memory.data && !data.data.empty() && data.offset == 0 && data.data.size() < WABT_PAGE_SIZE) {
+		if (_memoryCallback) {
+			_memoryCallback(memory, 1 * WABT_PAGE_SIZE, RuntimeMemory::Action::Alloc, _linkingContext);
+		} else {
+			Runtime_alloc_mem(memory);
+		}
 	}
-	if (memory.data.size() < data.offset + data.data.size()) {
+	if (memory.size < data.offset + data.data.size()) {
 		pushErrorStream([&] (std::ostream &stream) {
 			stream << "Fail to emplace memory data, position out of bounds: " << data.offset << ":" << data.data.size();
 		});
 		return false;
 	}
 
-	auto ptr = memory.data.data() + data.offset;
+	auto ptr = memory.data + data.offset;
 	memcpy(ptr, data.data.data(), data.data.size());
 
 	if (data.offset + data.data.size() > memory.userDataOffset) {
-		memory.userDataOffset = data.offset + data.data.size();
+		memory.userDataOffset = ALIGN(data.offset + data.data.size(), 16);
 	}
 	return true;
 }
 
-void Runtime::initTable(RuntimeTable &table) {
+bool Runtime::initTable(RuntimeTable &table) {
 	Value fillValue; fillValue.i32 = kInvalidIndex;
 	table.values.resize(table.limits.initial, fillValue);
+	return true;
 }
 
 bool Runtime::emplaceTableElements(RuntimeTable &table, const Module::Elements &elements) {
@@ -825,6 +930,48 @@ bool Runtime::emplaceTableElements(RuntimeTable &table, const Module::Elements &
 		++ i;
 	}
 	return true;
+}
+
+static constexpr uint32_t DEFAULT_BOUNDARY = 4;
+static constexpr uint32_t ALIGN_FORWARD(uint32_t size) { return (((size) + (DEFAULT_BOUNDARY - 1)) & ~(DEFAULT_BOUNDARY - 1)); }
+static constexpr uint32_t ALIGN_BACKWARD(uint32_t size) { return (size & ~(DEFAULT_BOUNDARY - 1)); }
+
+uint8_t *RuntimeMemory::get(Index offset) const {
+	if (offset < this->size) {
+		return &this->data[offset];
+	}
+	return nullptr;
+}
+
+uint8_t *RuntimeMemory::get(Index offset, Index size) const {
+	if (offset + size <= this->size) {
+		return &this->data[offset];
+	}
+	return nullptr;
+}
+
+void RuntimeMemory::print(std::ostream &stream, uint32_t address, uint32_t size) const {
+	auto addr = ALIGN_BACKWARD(address);
+	size += (address - addr);
+	size = ALIGN_FORWARD(size);
+
+	stream << "Memory:"
+			<< " 0x" << std::hex << std::setw(8) << std::setfill('0') << addr << " to 0x" << std::setw(8) << (addr + size)
+			<< std::dec << " (" << addr << " - " << (addr + size) << ") +" << (address - addr) << "\n";
+
+	auto d = get(addr, size);
+	size_t count = 0;
+	for (size_t i = 0; i < size; ++ i) {
+		stream << std::hex << std::setw(2) << std::setfill('0') << (uint32_t)d[i];
+		++ count;
+		if (count == 32) {
+			stream << "\n";
+			count = 0;
+		} else if (count % 4 == 0) {
+			stream << " ";
+		}
+	}
+	stream << "\n";
 }
 
 }

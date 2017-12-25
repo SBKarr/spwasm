@@ -27,12 +27,13 @@ class Thread;
 class Runtime;
 class RuntimeModule;
 class Module;
+class ModuleReader;
 
 struct HostFunc;
 
 using TypeInitList = std::initializer_list<Type>;
 using ValueInitList = std::initializer_list<Value>;
-using HostFuncCallback = Result (*)(const Thread *, const HostFunc * func, Value* buf);
+using HostFuncCallback = Result (*)(Thread *, const HostFunc * func, Value* buf);
 
 struct Func {
 	struct Local {
@@ -100,6 +101,7 @@ struct Func {
 	const Module *module = nullptr;
 	Vector<Type> types;
 	Vector<OpcodeRec> opcodes;
+	String name;
 };
 
 // Module should store only headers and constant data, not runtime data
@@ -198,6 +200,7 @@ public:
 
 	bool init(const uint8_t *, size_t, const ReadOptions & = ReadOptions());
 	bool init(Environment *, const uint8_t *, size_t, const ReadOptions & = ReadOptions());
+	bool init(Environment *, ModuleReader &reader, const uint8_t *, size_t, const ReadOptions & = ReadOptions());
 
 	bool hasMemory() const;
 	bool hasTable() const;
@@ -242,6 +245,8 @@ public:
 	const Vector<Elements> &getTableElements() const;
 	const Vector<Data> &getMemoryData() const;
 
+	Offset getLinkingOffset() const;
+
 	void printInfo(std::ostream &) const;
 
 protected:
@@ -265,6 +270,8 @@ protected:
 	Vector<Data> _data;
 
 	IndexObject _startFunction;
+	Index _stackPointer = kInvalidIndex;
+	Offset _dataSize = kInvalidOffset;
 };
 
 }

@@ -19,16 +19,6 @@
 #include "Module.h"
 #include "Environment.h"
 
-#define PRINT_CONTENT 0
-
-#if (PRINT_CONTENT)
-#define BINARY_PRINTF(...) printf(__VA_ARGS__)
-#else
-#define BINARY_PRINTF
-#endif
-
-#define CHECK_RESULT(expr) do { if (expr == ::wasm::Result::Error) { return ::wasm::Result::Error; } } while (0)
-
 namespace wasm {
 
 static Result CheckHasMemory(ModuleReader *reader, Module *module, Opcode opcode) {
@@ -142,12 +132,13 @@ Result ModuleReader::EndFunctionBody(Index index) {
 				it.value32.v2 = _labels[it.value32.v1].offset;
 			}
 			break;
+		default:
+			break;
 		}
 	}
 
 	_opcodes.clear();
 	_labels.clear();
-	_jumpTable.clear();
 
 	BINARY_PRINTF("%s\n", __FUNCTION__);
 	return Result::Ok;
@@ -254,12 +245,9 @@ Result ModuleReader::OnBrTableExpr(Index num_targets, Index* target_depths, Inde
 	BINARY_PRINTF("%s\n", __FUNCTION__);
 
 	auto size = _labelStack.size();
-	//auto target = _jumpTable.size();
-	//_jumpTable.push_back(num_targets);
-
-	EmitOpcodeValue(Opcode::BrTable, num_targets, 0);
 
 	CHECK_RESULT(_typechecker.BeginBrTable());
+	EmitOpcodeValue(Opcode::BrTable, num_targets, 0);
 	for (Index i = 0; i < num_targets; ++i) {
 		EmitOpcodeValue(Opcode::BrTable, _labelStack[size - 1 - target_depths[i]], kInvalidIndex);
 		CHECK_RESULT(_typechecker.OnBrTableTarget(target_depths[i]));
@@ -291,8 +279,6 @@ Result ModuleReader::OnElseExpr() {
 	auto backLabel = _labels.at(_labelStack.back());
 	EmitOpcodeValue(Opcode::Else, _labelStack.back(), kInvalidIndex);
 	_opcodes[backLabel.origin].value32.v2 = _opcodes.size();
-	//PopLabel(_opcodes.size() + 1);
-	//PushLabel(backLabel.results, backLabel.stack, kInvalidIndex);
 	return Result::Ok;
 }
 Result ModuleReader::OnEndExpr() {
@@ -386,7 +372,11 @@ Result ModuleReader::OnGetGlobalExpr(Index global_index) {
 	}
 
 	CHECK_RESULT(_typechecker.OnGetGlobal(type.first));
-	EmitOpcodeValue(Opcode::GetGlobal, global_index);
+	if (global_index == _targetModule->_stackPointer) {
+		EmitOpcodeValue(Opcode::InterpGetStack, 0, 0);
+	} else {
+		EmitOpcodeValue(Opcode::GetGlobal, global_index);
+	}
 	return Result::Ok;
 }
 Result ModuleReader::OnSetGlobalExpr(Index global_index) {
@@ -404,7 +394,12 @@ Result ModuleReader::OnSetGlobalExpr(Index global_index) {
 		return Result::Error;
 	}
 	CHECK_RESULT(_typechecker.OnSetGlobal(type.first));
-	EmitOpcodeValue(Opcode::SetGlobal, global_index);
+
+	if (global_index == _targetModule->_stackPointer) {
+		EmitOpcodeValue(Opcode::InterpSetStack, 0, 0);
+	} else {
+		EmitOpcodeValue(Opcode::SetGlobal, global_index);
+	}
 	return Result::Ok;
 }
 
@@ -462,7 +457,6 @@ Result ModuleReader::OnTeeLocalExpr(Index local_index) {
 
 Result ModuleReader::OnReturnExpr() {
 	BINARY_PRINTF("%s\n", __FUNCTION__);
-	Index drop_count, keep_count;
 	CHECK_RESULT(_typechecker.OnReturn());
 	EmitOpcodeValue(Opcode::Return, _currentFunc->sig->results.size()); // return count
 	return Result::Ok;

@@ -18,6 +18,9 @@
 #ifndef SRC_THREAD_H_
 #define SRC_THREAD_H_
 
+#include <shared_mutex>
+#include <atomic>
+#include <condition_variable>
 #include "Module.h"
 
 #define WABT_WARN_UNUSED __attribute__ ((warn_unused_result))
@@ -50,6 +53,8 @@ namespace wasm {
 	V(TrapCallStackExhausted, "call stack exhausted")                         \
 	/* ran out of value stack space */                                        \
 	V(TrapValueStackExhausted, "value stack exhausted")                       \
+	/* ran out of value stack space */                                        \
+	V(TrapUserStackExhausted, "user stack exhausted")                         \
 	/* we called a host function, but the return value didn't match the */    \
 	/* expected type */                                                       \
 	V(TrapHostResultTypeMismatch, "host result type mismatch")                \
@@ -62,6 +67,14 @@ namespace wasm {
 	V(UnknownExport, "unknown export")                                        \
 	/* the expected export kind doesn't match. */                             \
 	V(ExportKindMismatch, "export kind mismatch")
+
+struct RuntimeMemory;
+
+struct ThreadContext {
+	std::atomic<bool> stopFlag;
+	std::shared_timed_mutex mutex;
+	std::condition_variable_any cond;
+};
 
 class Thread {
 public:
@@ -85,21 +98,57 @@ public:
 
 	bool init(uint32_t = kDefaultValueStackSize, uint32_t = kDefaultCallStackSize);
 
+	void setSyncContext(ThreadContext *ctx);
+	ThreadContext *getSyncContext() const;
+
+	void setUserContext(uint32_t);
+	uint32_t getUserContext() const;
+
+	void setThreadContext(void *);
+	void *getThreadContext() const;
+
+	void setUserStackPointer(uint32_t pointer, uint32_t guard = 0);
+	uint32_t getUserStackPointer() const;
+	uint32_t getUserStackGuard() const;
+
+	Result allocStack(uint32_t size, uint32_t &result);
+	void freeStack(uint32_t size);
+
+	template <typename Callback>
+	Result allocCallback(uint32_t size, const Callback &cb) {
+		uint32_t ptr;
+		auto res = allocStack(size, ptr);
+		if (res == Result::Ok) {
+			res = cb(ptr, size);
+		}
+		return res;
+	}
+
 	void Reset();
 	Index NumValues() const { return _valueStackTop; }
 	Result Push(Value) WABT_WARN_UNUSED;
 	Value Pop();
 	Value ValueAt(Index at) const;
 
-	Result Run(const RuntimeModule *module, const Func *func, Value *buffer = nullptr);
+	template <typename Callback>
+	Result Prepare(const RuntimeModule &, const Func &, const Callback &, bool silent = false);
+
+	Result Run(const RuntimeModule &, const Func &, Value *buffer = nullptr, bool silent = false);
+
+	RuntimeMemory *GetMemoryPtr(Index memIndex) const;
 
 	uint8_t *GetMemory(Index memIndex, Index offset) const;
+	uint8_t *GetMemory(Index memIndex, Index offset, Index size) const;
 
 	void PrintStackFrame(std::ostream &, const CallStackFrame &, Index maxOpcodes = kInvalidIndex) const;
 	void PrintStackTrace(std::ostream &, Index maxUnwind = kInvalidIndex, Index maxOpcodes = kInvalidIndex) const;
 
+	void PrintMemoryDump(std::ostream &stream, Index memIndex, uint32_t address, uint32_t size);
+
+	bool GrowMemory(const RuntimeMemory *module, Index pages);
+
 private:
-	Result PushLocals(const Func *func, const Value *buffer, Index storeParams = 0);
+	Result PushLocals(const Func &func, const Value *buffer, Index storeParams = 0);
 
 	template<typename MemType>
 	Result GetAccessAddress(const Func::OpcodeRec * pc, void** out_address);
@@ -124,9 +173,11 @@ private:
 
 	void StoreResult(Value *, Index stack, Index results);
 
+	void TrySync();
+
 	Result Run(Index stackTop);
-	Result PushCall(const RuntimeModule *module, const Func *func) WABT_WARN_UNUSED;
-	Result PushCall(const RuntimeModule *module, Index idx, bool import) WABT_WARN_UNUSED;
+	Result PushCall(const RuntimeModule &module, const Func &func) WABT_WARN_UNUSED;
+	Result PushCall(const RuntimeModule &module, Index idx, bool import) WABT_WARN_UNUSED;
 	void PopCall(Index);
 
 	template<typename R, typename T> using UnopFunc = R(T);
@@ -157,7 +208,12 @@ private:
 	template<typename R, typename T = R>
 	Result BinopTrap(BinopTrapFunc<R, T> func) WABT_WARN_UNUSED;
 
+	void onThreadError() const;
+
 	const Runtime *_runtime = nullptr;
+
+	std::shared_lock<std::shared_timed_mutex> _contextLock;
+	ThreadContext *_context = nullptr;
 
 	Vector<Value> _valueStack;
 	Index _valueStackTop = 0;
@@ -166,7 +222,66 @@ private:
 	Vector<CallStackFrame> _callStack;
 	uint32_t _callStackTop = 0;
 	Index _tag = 0;
+
+	uint32_t _userStackPointer = 0;
+	uint32_t _userStackGuard = 0;
+	uint32_t _userContext = 0;
+	void *_threadContext = nullptr;
 };
+
+
+template <typename Callback>
+inline Thread::Result Thread::Prepare(const RuntimeModule &module, const Func &func, const Callback &cb, bool silent) {
+	auto origStack = _callStackTop;
+	auto origValue = _valueStackTop;
+
+	const Index extraStackSpace = std::max(func.types.size(), func.sig->results.size());
+
+	if (_valueStackTop + extraStackSpace > _valueStack.size()) {
+		return Result::TrapValueStackExhausted;
+	}
+
+	if (_callStackTop >= _callStack.size()) {
+		return Result::TrapCallStackExhausted;
+	}
+
+	memset(_valueStack.data() + _valueStackTop, 0, sizeof(Value) * extraStackSpace);
+
+	return cb(_valueStack.data() + _valueStackTop, [&] () -> Result {
+		bool locked = false;
+		if (_contextLock.mutex() && !_contextLock.owns_lock()) {
+			_contextLock.lock();
+			locked = true;
+		}
+
+		const auto nParams = func.types.size();
+		_valueStackTop += nParams;
+		auto res = PushCall(module, func);
+		if (res != Result::Ok) {
+			return res;
+		}
+
+		res = Run(origStack);
+		if (res == Result::Ok || res == Result::Returned) {
+			Index nResults = func.sig->results.size();
+			if (nParams != 0) {
+				memmove(&_valueStack[_valueStackTop - nResults - nParams], &_valueStack[_valueStackTop - nResults], nResults * sizeof(Value));
+			}
+		} else {
+			if (!silent) {
+				onThreadError();
+			}
+		}
+
+		_callStackTop = origStack;
+		_valueStackTop = origValue;
+
+		if (locked) {
+			_contextLock.unlock();
+		}
+		return res;
+	});
+}
 
 }
 
